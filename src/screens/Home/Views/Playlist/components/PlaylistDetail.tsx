@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, TouchableOpacity, FlatList, Alert } from 'react-native'
+import { View, TouchableOpacity, FlatList, Animated, Easing } from 'react-native'
 import Text from '@/components/common/Text'
 import { Icon } from '@/components/common/Icon'
 import Button from '@/components/common/Button'
@@ -29,6 +29,11 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
   const [selectedMusicIds, setSelectedMusicIds] = useState<Set<string>>(new Set())
   const [isReorderMode, setIsReorderMode] = useState(false)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [animatingIndices, setAnimatingIndices] = useState<Set<number>>(new Set())
+  const scaleAnims = useRef<Map<string, Animated.Value>>(new Map())
+  const opacityAnims = useRef<Map<string, Animated.Value>>(new Map())
+  const translateAnims = useRef<Map<string, Animated.Value>>(new Map())
+  const isAnimating = useRef(false)
 
   useEffect(() => {
     if (!isEditMode) {
@@ -75,17 +80,108 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
     }
   }, [selectedMusicIds, playlistId, t])
 
+  const getOrCreateAnim = useCallback((musicId: string) => {
+    if (!scaleAnims.current.has(musicId)) {
+      scaleAnims.current.set(musicId, new Animated.Value(1))
+    }
+    if (!opacityAnims.current.has(musicId)) {
+      opacityAnims.current.set(musicId, new Animated.Value(1))
+    }
+    if (!translateAnims.current.has(musicId)) {
+      translateAnims.current.set(musicId, new Animated.Value(0))
+    }
+    return {
+      scale: scaleAnims.current.get(musicId)!,
+      opacity: opacityAnims.current.get(musicId)!,
+      translateY: translateAnims.current.get(musicId)!,
+    }
+  }, [])
+
+  const playMoveAnimation = useCallback(async (movingIndex: number, targetIndex: number, direction: 'up' | 'down') => {
+    if (isAnimating.current) return
+    isAnimating.current = true
+
+    const movingMusic = musics[movingIndex]
+    const targetMusic = musics[targetIndex]
+    if (!movingMusic || !targetMusic) {
+      isAnimating.current = false
+      return
+    }
+
+    const movingAnim = getOrCreateAnim(movingMusic.id)
+    const targetAnim = getOrCreateAnim(targetMusic.id)
+
+    setAnimatingIndices(new Set([movingIndex, targetIndex]))
+    setDraggedIndex(movingIndex)
+
+    const itemHeight = scaleSizeH(LIST_ITEM_HEIGHT)
+    const moveDistance = direction === 'up' ? -itemHeight : itemHeight
+
+    try {
+      await Promise.all([
+        new Promise<void>((resolve) => {
+          Animated.parallel([
+            Animated.timing(movingAnim.scale,
+            {
+              toValue: 1.05,
+              duration: 150,
+              easing: Easing.out(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(movingAnim.opacity,
+            {
+              toValue: 0.8,
+              duration: 150,
+              easing: Easing.out(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(movingAnim.translateY,
+            {
+              toValue: moveDistance,
+              duration: 250,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ]).start(() => {
+            movingAnim.scale.setValue(1)
+            movingAnim.opacity.setValue(1)
+            movingAnim.translateY.setValue(0)
+            resolve()
+          })
+        }),
+        new Promise<void>((resolve) => {
+          Animated.timing(targetAnim.translateY,
+          {
+            toValue: -moveDistance,
+            duration: 250,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }).start(() => {
+            targetAnim.translateY.setValue(0)
+            resolve()
+          })
+        }),
+      ])
+
+      await updateMusicPosition(playlistId, targetIndex, [movingMusic.id])
+    } catch (error) {
+      console.error('Animation error:', error)
+    } finally {
+      setAnimatingIndices(new Set())
+      setDraggedIndex(null)
+      isAnimating.current = false
+    }
+  }, [musics, playlistId, getOrCreateAnim])
+
   const handleMoveUp = useCallback((index: number) => {
-    if (index <= 0) return
-    const music = musics[index]
-    void updateMusicPosition(playlistId, index - 1, [music.id])
-  }, [musics, playlistId])
+    if (index <= 0 || isAnimating.current) return
+    playMoveAnimation(index, index - 1, 'up')
+  }, [playMoveAnimation])
 
   const handleMoveDown = useCallback((index: number) => {
-    if (index >= musics.length - 1) return
-    const music = musics[index]
-    void updateMusicPosition(playlistId, index + 1, [music.id])
-  }, [musics, playlistId])
+    if (index >= musics.length - 1 || isAnimating.current) return
+    playMoveAnimation(index, index + 1, 'down')
+  }, [musics.length, playMoveAnimation])
 
   const handleAddMusic = useCallback(() => {
     musicSelectModalRef.current?.setVisible(true)
@@ -94,17 +190,30 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
   const renderItem = useCallback(({ item, index }: { item: LX.Music.MusicInfo; index: number }) => {
     const isSelected = selectedMusicIds.has(item.id)
     const isDragged = draggedIndex === index
+    const isAnimatingItem = animatingIndices.has(index)
+    const anim = getOrCreateAnim(item.id)
+
+    const animatedStyle = {
+      transform: [
+        { scale: anim.scale },
+        { translateY: anim.translateY },
+      ],
+      opacity: anim.opacity,
+    }
 
     return (
-      <View
-        style={{
-          ...styles.item,
-          backgroundColor: isSelected
-            ? theme['c-primary-background-hover']
-            : isDragged
-              ? theme['c-primary-light-700-alpha-300']
-              : 'transparent',
-        }}
+      <Animated.View
+        style={[
+          {
+            ...styles.item,
+            backgroundColor: isSelected
+              ? theme['c-primary-background-hover']
+              : isDragged
+                ? theme['c-primary-light-700-alpha-300']
+                : 'transparent',
+          },
+          isAnimatingItem ? animatedStyle : null,
+        ]}
       >
         {isEditMode ? (
           <Checkbox
@@ -131,14 +240,14 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
             <TouchableOpacity
               style={[styles.reorderBtn, index === 0 && { opacity: 0.3 }]}
               onPress={() => handleMoveUp(index)}
-              disabled={index === 0}
+              disabled={index === 0 || isAnimating.current}
             >
               <Icon name="chevron-left-2" size={18} color={theme['c-350']} />
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.reorderBtn, index === musics.length - 1 && { opacity: 0.3 }]}
               onPress={() => handleMoveDown(index)}
-              disabled={index === musics.length - 1}
+              disabled={index === musics.length - 1 || isAnimating.current}
             >
               <Icon name="chevron-right-2" size={18} color={theme['c-350']} />
             </TouchableOpacity>
@@ -150,9 +259,9 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
             {item.interval || '--:--'}
           </Text>
         ) : null}
-      </View>
+      </Animated.View>
     )
-  }, [selectedMusicIds, draggedIndex, theme, isEditMode, isReorderMode, musics.length, handleToggleMusic, handleMoveUp, handleMoveDown])
+  }, [selectedMusicIds, draggedIndex, animatingIndices, theme, isEditMode, isReorderMode, musics.length, handleToggleMusic, handleMoveUp, handleMoveDown, getOrCreateAnim])
 
   const keyExtractor = useCallback((item: LX.Music.MusicInfo) => item.id, [])
 

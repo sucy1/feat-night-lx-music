@@ -239,5 +239,186 @@ describe('playlist/action', () => {
       expect(updatedMusics![2].id).toBe('m2')
       expect(mockEmit).toHaveBeenCalledWith('playlistMusicsUpdated', 'test1', updatedMusics)
     })
+
+    it('should move single music up one position', () => {
+      const musics: LX.Music.MusicInfo[] = [
+        { id: 'm1', name: 'Song 1', singer: 'Artist 1', source: 'kw', interval: '3:45', meta: {} as any } as any,
+        { id: 'm2', name: 'Song 2', singer: 'Artist 2', source: 'kw', interval: '4:00', meta: {} as any } as any,
+        { id: 'm3', name: 'Song 3', singer: 'Artist 3', source: 'kw', interval: '3:30', meta: {} as any } as any,
+      ]
+      state.playlistMusics.set('test1', [...musics])
+
+      playlistAction.updatePlaylistMusicPosition('test1', 1, ['m1'])
+
+      const updatedMusics = state.playlistMusics.get('test1')
+      expect(updatedMusics!.map(m => m.id)).toEqual(['m2', 'm1', 'm3'])
+    })
+
+    it('should move single music down one position', () => {
+      const musics: LX.Music.MusicInfo[] = [
+        { id: 'm1', name: 'Song 1', singer: 'Artist 1', source: 'kw', interval: '3:45', meta: {} as any } as any,
+        { id: 'm2', name: 'Song 2', singer: 'Artist 2', source: 'kw', interval: '4:00', meta: {} as any } as any,
+        { id: 'm3', name: 'Song 3', singer: 'Artist 3', source: 'kw', interval: '3:30', meta: {} as any } as any,
+      ]
+      state.playlistMusics.set('test1', [...musics])
+
+      playlistAction.updatePlaylistMusicPosition('test1', 2, ['m2'])
+
+      const updatedMusics = state.playlistMusics.get('test1')
+      expect(updatedMusics!.map(m => m.id)).toEqual(['m1', 'm3', 'm2'])
+    })
+
+    it('should move multiple musics to target position', () => {
+      const musics: LX.Music.MusicInfo[] = [
+        { id: 'm1', name: 'Song 1', singer: 'Artist 1', source: 'kw', interval: '3:45', meta: {} as any } as any,
+        { id: 'm2', name: 'Song 2', singer: 'Artist 2', source: 'kw', interval: '4:00', meta: {} as any } as any,
+        { id: 'm3', name: 'Song 3', singer: 'Artist 3', source: 'kw', interval: '3:30', meta: {} as any } as any,
+        { id: 'm4', name: 'Song 4', singer: 'Artist 4', source: 'kw', interval: '3:15', meta: {} as any } as any,
+      ]
+      state.playlistMusics.set('test1', [...musics])
+
+      playlistAction.updatePlaylistMusicPosition('test1', 0, ['m3', 'm4'])
+
+      const updatedMusics = state.playlistMusics.get('test1')
+      expect(updatedMusics!.map(m => m.id)).toEqual(['m3', 'm4', 'm1', 'm2'])
+    })
+
+    it('should update playlist updateTime when position changes', () => {
+      const musics: LX.Music.MusicInfo[] = [
+        { id: 'm1', name: 'Song 1', singer: 'Artist 1', source: 'kw', interval: '3:45', meta: {} as any } as any,
+        { id: 'm2', name: 'Song 2', singer: 'Artist 2', source: 'kw', interval: '4:00', meta: {} as any } as any,
+      ]
+      const playlist: LX.Playlist.PlaylistInfo = {
+        id: 'test1',
+        name: 'Test Playlist',
+        createTime: 1234567890,
+        updateTime: 1234567890,
+        musicCount: 2,
+      }
+      state.playlists = [playlist]
+      state.playlistMusics.set('test1', [...musics])
+
+      const beforeUpdate = Date.now()
+      playlistAction.updatePlaylistMusicPosition('test1', 0, ['m2'])
+      const afterUpdate = Date.now()
+
+      expect(state.playlists[0].updateTime).toBeGreaterThanOrEqual(beforeUpdate)
+      expect(state.playlists[0].updateTime).toBeLessThanOrEqual(afterUpdate)
+    })
+  })
+
+  describe('CRUD operations - comprehensive', () => {
+    it('should complete full CRUD lifecycle', () => {
+      const now = Date.now()
+      const playlist: LX.Playlist.PlaylistInfo = {
+        id: 'crud_test',
+        name: 'CRUD Test',
+        createTime: now,
+        updateTime: now,
+        musicCount: 0,
+      }
+
+      playlistAction.addPlaylist(playlist)
+      expect(state.playlists).toHaveLength(1)
+      expect(state.playlists[0].id).toBe('crud_test')
+
+      playlistAction.setActivePlaylist('crud_test')
+      expect(state.activePlaylistId).toBe('crud_test')
+
+      const music1: LX.Music.MusicInfo = { id: 'm1', name: 'Song 1', singer: 'Artist 1', source: 'kw', interval: '3:45', meta: {} as any } as any
+      const music2: LX.Music.MusicInfo = { id: 'm2', name: 'Song 2', singer: 'Artist 2', source: 'kw', interval: '4:00', meta: {} as any } as any
+      playlistAction.addPlaylistMusics('crud_test', [music1, music2], 'bottom')
+      expect(state.playlistMusics.get('crud_test')).toHaveLength(2)
+      expect(state.playlists[0].musicCount).toBe(2)
+
+      const updatedPlaylist: LX.Playlist.PlaylistInfo = {
+        ...playlist,
+        name: 'Updated CRUD Test',
+        description: 'Test description',
+      }
+      playlistAction.updatePlaylist(updatedPlaylist)
+      expect(state.playlists[0].name).toBe('Updated CRUD Test')
+      expect(state.playlists[0].description).toBe('Test description')
+
+      playlistAction.removePlaylistMusics('crud_test', ['m1'])
+      expect(state.playlistMusics.get('crud_test')).toHaveLength(1)
+      expect(state.playlists[0].musicCount).toBe(1)
+
+      const fullPlaylist: LX.Playlist.PlaylistInfoFull = {
+        id: 'crud_test',
+        name: 'Updated CRUD Test',
+        description: 'Test description',
+        createTime: now,
+        updateTime: Date.now(),
+        musicCount: 1,
+        list: [music2],
+      }
+      playlistAction.setPlaylist(fullPlaylist)
+      expect(state.playlistMusics.get('crud_test')).toHaveLength(1)
+
+      playlistAction.removePlaylist('crud_test')
+      expect(state.playlists).toHaveLength(0)
+      expect(state.activePlaylistId).toBeNull()
+      expect(state.playlistMusics.has('crud_test')).toBe(false)
+    })
+
+    it('should handle adding duplicate musics by skipping them', () => {
+      const music1: LX.Music.MusicInfo = { id: 'm1', name: 'Song 1', singer: 'Artist 1', source: 'kw', interval: '3:45', meta: {} as any } as any
+      state.playlistMusics.set('test1', [music1])
+      const playlist: LX.Playlist.PlaylistInfo = {
+        id: 'test1',
+        name: 'Test',
+        createTime: Date.now(),
+        updateTime: Date.now(),
+        musicCount: 1,
+      }
+      state.playlists = [playlist]
+
+      playlistAction.addPlaylistMusics('test1', [music1], 'bottom')
+
+      expect(state.playlistMusics.get('test1')).toHaveLength(1)
+      expect(state.playlists[0].musicCount).toBe(1)
+    })
+
+    it('should handle removing non-existent music ids gracefully', () => {
+      const musics: LX.Music.MusicInfo[] = [
+        { id: 'm1', name: 'Song 1', singer: 'Artist 1', source: 'kw', interval: '3:45', meta: {} as any } as any,
+      ]
+      state.playlistMusics.set('test1', [...musics])
+      const playlist: LX.Playlist.PlaylistInfo = {
+        id: 'test1',
+        name: 'Test',
+        createTime: Date.now(),
+        updateTime: Date.now(),
+        musicCount: 1,
+      }
+      state.playlists = [playlist]
+
+      playlistAction.removePlaylistMusics('test1', ['non_existent_id'])
+
+      expect(state.playlistMusics.get('test1')).toHaveLength(1)
+      expect(state.playlists[0].musicCount).toBe(1)
+    })
+
+    it('should handle updating position with empty music ids', () => {
+      const musics: LX.Music.MusicInfo[] = [
+        { id: 'm1', name: 'Song 1', singer: 'Artist 1', source: 'kw', interval: '3:45', meta: {} as any } as any,
+        { id: 'm2', name: 'Song 2', singer: 'Artist 2', source: 'kw', interval: '4:00', meta: {} as any } as any,
+      ]
+      state.playlistMusics.set('test1', [...musics])
+
+      playlistAction.updatePlaylistMusicPosition('test1', 0, [])
+
+      const updatedMusics = state.playlistMusics.get('test1')
+      expect(updatedMusics!.map(m => m.id)).toEqual(['m1', 'm2'])
+    })
+
+    it('should handle playlist that does not exist when setting musics', () => {
+      const music1: LX.Music.MusicInfo = { id: 'm1', name: 'Song 1', singer: 'Artist 1', source: 'kw', interval: '3:45', meta: {} as any } as any
+
+      playlistAction.setPlaylistMusics('non_existent', [music1])
+
+      expect(state.playlistMusics.get('non_existent')).toEqual([music1])
+    })
   })
 })
