@@ -26,6 +26,8 @@
   "playlist_save": "Save",
   "playlist_cancel": "Cancel",
   "playlist_no_music": "No songs in this playlist",
+  "playlist_search_placeholder": "Search by song name or artist",
+  "playlist_search_no_result": "No matching songs found",
   "cancel": "Cancel",
   "cancel_button_text_2": "No, no, wrong click",
   "change_position": "Adjust Position",

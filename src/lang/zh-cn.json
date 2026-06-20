@@ -115,6 +115,8 @@
   "playlist_save": "保存",
   "playlist_cancel": "取消",
   "playlist_no_music": "歌单中暂无歌曲",
+  "playlist_search_placeholder": "搜索歌曲名称或歌手",
+  "playlist_search_no_result": "未找到匹配的歌曲",
   "list_select_cancel": "取消",
   "list_select_local_file": "添加本地歌曲",
   "list_select_local_file_desc": "选择本地歌曲文件夹",

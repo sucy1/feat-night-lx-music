@@ -3,6 +3,7 @@ import { View, TouchableOpacity, FlatList, Animated, Easing } from 'react-native
 import Text from '@/components/common/Text'
 import { Icon } from '@/components/common/Icon'
 import Button from '@/components/common/Button'
+import Input from '@/components/common/Input'
 import Checkbox from '@/components/common/CheckBox/Checkbox'
 import { useTheme } from '@/store/theme/hook'
 import { useI18n } from '@/lang'
@@ -34,12 +35,41 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
   const opacityAnims = useRef<Map<string, Animated.Value>>(new Map())
   const translateAnims = useRef<Map<string, Animated.Value>>(new Map())
   const isAnimating = useRef(false)
+  const [searchKeyword, setSearchKeyword] = useState('')
+  const [isSearchVisible, setIsSearchVisible] = useState(false)
 
   useEffect(() => {
     if (!isEditMode) {
       setSelectedMusicIds(new Set())
     }
   }, [isEditMode])
+
+  useEffect(() => {
+    if (isEditMode || isReorderMode) {
+      setSearchKeyword('')
+      setIsSearchVisible(false)
+    }
+  }, [isEditMode, isReorderMode])
+
+  const filteredMusics = useMemo(() => {
+    if (!searchKeyword) return musics
+    const keyword = searchKeyword.toLowerCase()
+    return musics.filter(m =>
+      m.name.toLowerCase().includes(keyword) ||
+      m.singer.toLowerCase().includes(keyword)
+    )
+  }, [musics, searchKeyword])
+
+  const handleSearchChange = useCallback((text: string) => {
+    setSearchKeyword(text.trim())
+  }, [])
+
+  const handleToggleSearch = useCallback(() => {
+    setIsSearchVisible(prev => {
+      if (prev) setSearchKeyword('')
+      return !prev
+    })
+  }, [])
 
   const handleToggleMusic = useCallback((musicId: string) => {
     if (!isEditMode) return
@@ -192,6 +222,7 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
     const isDragged = draggedIndex === index
     const isAnimatingItem = animatingIndices.has(index)
     const anim = getOrCreateAnim(item.id)
+    const originalIndex = musics.findIndex(m => m.id === item.id)
 
     const animatedStyle = {
       transform: [
@@ -225,7 +256,7 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
             onPress={() => handleToggleMusic(item.id)}
           />
         ) : (
-          <Text style={styles.sn} size={13} color={theme['c-300']}>{index + 1}</Text>
+          <Text style={styles.sn} size={13} color={theme['c-300']}>{originalIndex + 1}</Text>
         )}
 
         <View style={styles.itemInfo}>
@@ -261,7 +292,7 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
         ) : null}
       </Animated.View>
     )
-  }, [selectedMusicIds, draggedIndex, animatingIndices, theme, isEditMode, isReorderMode, musics.length, handleToggleMusic, handleMoveUp, handleMoveDown, getOrCreateAnim])
+  }, [selectedMusicIds, draggedIndex, animatingIndices, theme, isEditMode, isReorderMode, musics, filteredMusics.length, handleToggleMusic, handleMoveUp, handleMoveDown, getOrCreateAnim])
 
   const keyExtractor = useCallback((item: LX.Music.MusicInfo) => item.id, [])
 
@@ -284,6 +315,7 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
             ) : null}
             <Text style={styles.playlistCount} size={12} color={theme['c-500']}>
               {playlist.musicCount} {t('play_detail_setting_lrc_font_size') === '歌词字体大小' ? '首歌曲' : ' songs'}
+              {searchKeyword ? ` (${filteredMusics.length})` : ''}
             </Text>
           </View>
         </View>
@@ -348,28 +380,57 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
                   {t('change_position')}
                 </Text>
               </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={handleToggleSearch}>
+                <Icon name="search-2" size={18} color={isSearchVisible ? theme['c-primary'] : theme['c-350']} />
+              </TouchableOpacity>
             </>
           )}
         </View>
 
+        {isSearchVisible && !isEditMode && !isReorderMode ? (
+          <View style={{ ...styles.searchBar, backgroundColor: theme['c-primary-input-background'] }}>
+            <Icon name="search-2" size={16} color={theme['c-primary-dark-100-alpha-500']} />
+            <Input
+              placeholder={t('playlist_search_placeholder')}
+              value={searchKeyword}
+              onChangeText={handleSearchChange}
+              style={styles.searchInput}
+              clearBtn
+              autoFocus
+            />
+          </View>
+        ) : null}
+
         <View style={{ ...styles.separator, backgroundColor: theme['c-border-background'] }} />
       </View>
     )
-  }, [playlist, theme, t, isEditMode, isReorderMode, selectedMusicIds.size, handleSelectAll, handleDeleteSelected, handleAddMusic])
+  }, [playlist, theme, t, isEditMode, isReorderMode, selectedMusicIds.size, isSearchVisible, searchKeyword, filteredMusics.length, handleSelectAll, handleDeleteSelected, handleAddMusic, handleToggleSearch, handleSearchChange])
 
-  const ListEmptyComponent = useMemo(() => (
-    <View style={styles.emptyContainer}>
-      <Icon name="add-music" size={48} color={theme['c-primary-dark-100-alpha-300']} />
-      <Text style={styles.emptyText} color={theme['c-500']}>
-        {t('playlist_no_music')}
-      </Text>
-      <TouchableOpacity style={styles.emptyBtn} onPress={handleAddMusic}>
-        <Text style={styles.emptyBtnText} color={theme['c-primary']}>
-          {t('playlist_add_music')}
+  const ListEmptyComponent = useMemo(() => {
+    if (searchKeyword && musics.length > 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Icon name="search-2" size={48} color={theme['c-primary-dark-100-alpha-300']} />
+          <Text style={styles.emptyText} color={theme['c-500']}>
+            {t('playlist_search_no_result')}
+          </Text>
+        </View>
+      )
+    }
+    return (
+      <View style={styles.emptyContainer}>
+        <Icon name="add-music" size={48} color={theme['c-primary-dark-100-alpha-300']} />
+        <Text style={styles.emptyText} color={theme['c-500']}>
+          {t('playlist_no_music')}
         </Text>
-      </TouchableOpacity>
-    </View>
-  ), [theme, t, handleAddMusic])
+        <TouchableOpacity style={styles.emptyBtn} onPress={handleAddMusic}>
+          <Text style={styles.emptyBtnText} color={theme['c-primary']}>
+            {t('playlist_add_music')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }, [theme, t, searchKeyword, musics.length, handleAddMusic])
 
   if (!playlist) return null
 
@@ -386,7 +447,7 @@ const PlaylistDetail = ({ playlistId, onBack }: Props) => {
       </View>
 
       <FlatList
-        data={musics}
+        data={filteredMusics}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         ListHeaderComponent={ListHeaderComponent}
@@ -474,6 +535,18 @@ const styles = createStyle({
   },
   actionBtnDanger: {
     marginLeft: 'auto',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scaleSizeW(12),
+    marginHorizontal: scaleSizeW(12),
+    marginVertical: scaleSizeH(8),
+    borderRadius: 4,
+    height: 38,
+  },
+  searchInput: {
+    marginLeft: scaleSizeW(8),
   },
   item: {
     flexDirection: 'row',

@@ -26,6 +26,8 @@
   "playlist_save": "儲存",
   "playlist_cancel": "取消",
   "playlist_no_music": "歌單中暫無歌曲",
+  "playlist_search_placeholder": "搜尋歌曲名稱或歌手",
+  "playlist_search_no_result": "未找到符合的歌曲",
   "cancel": "取消",
   "cancel_button_text_2": "不不不，點錯了",
   "change_position": "調整位置",
