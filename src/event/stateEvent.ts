@@ -121,6 +121,18 @@ export class StateEvent extends Event {
   sourceNamesUpdated(names: CommonState['sourceNames']) {
     this.emit('sourceNamesUpdated', names)
   }
+
+  playlistsUpdated(playlists: LX.Playlist.PlaylistInfo[]) {
+    this.emit('playlistsUpdated', playlists)
+  }
+
+  activePlaylistUpdated(playlistId: string | null) {
+    this.emit('activePlaylistUpdated', playlistId)
+  }
+
+  playlistMusicsUpdated(playlistId: string, musics: LX.Music.MusicInfo[]) {
+    this.emit('playlistMusicsUpdated', playlistId, musics)
+  }
 }
 
 

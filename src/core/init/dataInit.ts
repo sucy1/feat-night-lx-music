@@ -8,6 +8,7 @@ import { bootLog } from '@/utils/bootLog'
 import { getDislikeInfo, setDislikeInfo } from '@/core/dislikeList'
 import { unlink } from '@/utils/fs'
 import { TEMP_FILE_PATH } from '@/utils/tools'
+import { loadPlaylists } from '@/core/playlist'
 // import { play, playList } from '../player/player'
 
 // const initPrevPlayInfo = async(appSetting: LX.AppSetting) => {
@@ -30,6 +31,9 @@ export default async(appSetting: LX.AppSetting) => {
   bootLog('User list init...')
   setUserList(await getUserLists()) // 获取用户列表
   setDislikeInfo(await getDislikeInfo()) // 获取不喜欢列表
+  bootLog('Playlist init...')
+  await loadPlaylists() // 加载歌单数据
+  bootLog('Playlist inited.')
   bootLog('User list inited.')
   setNavActiveId((await getViewPrevState()).id)
   void unlink(TEMP_FILE_PATH)
